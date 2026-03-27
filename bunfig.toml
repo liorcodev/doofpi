@@ -1,0 +1,12 @@
+[test]
+# Single pattern
+# coveragePathIgnorePatterns = "**/*.spec.ts"
+
+# Multiple patterns
+coveragePathIgnorePatterns = [
+  "**/*.spec.ts",
+  "**/*.test.ts",
+  "src/utils/**",
+  "*.config.js",
+  "index.ts"
+]

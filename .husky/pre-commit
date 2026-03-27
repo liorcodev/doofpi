@@ -1,0 +1,17 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+echo "→ Format check..."
+bun run format:check || exit 1
+
+echo "→ Lint check..."
+bun run lint:check || exit 1
+
+echo "→ Type check..."
+bun run typecheck || exit 1
+
+echo "→ Running tests..."
+bun test || exit 1
+
+echo "✓ All checks passed!"
