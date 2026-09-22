@@ -1,4 +1,5 @@
 import type { Routes, Endpoint, EndpointDefinition, InferZodType } from '../types';
+import type { BodyInit } from 'bun';
 
 export type Client<R extends Routes> = {
   [K in keyof R]: R[K] extends Endpoint<infer E>
@@ -21,7 +22,21 @@ export type Client<R extends Routes> = {
                   init?: ClientRequestInit
                 ) => Promise<InferZodType<Model['output']>>;
               }
-          : never
+          : E extends Required<Pick<EndpointDefinition<Model>, 'download'>>
+            ? InferZodType<Model['input']> extends never
+              ? { download: (input?: undefined, init?: ClientRequestInit) => Promise<Response> }
+              : { download: (input: InferZodType<Model['input']>, init?: ClientRequestInit) => Promise<Response> }
+            : E extends Required<Pick<EndpointDefinition<Model>, 'upload'>>
+              ? InferZodType<Model['input']> extends never
+                ? { upload: (input: undefined, body: BodyInit, init?: ClientRequestInit) => Promise<Response> }
+                : {
+                    upload: (
+                      input: InferZodType<Model['input']>,
+                      body: BodyInit,
+                      init?: ClientRequestInit
+                    ) => Promise<Response>;
+                  }
+              : never
       : never
     : R[K] extends Routes
       ? Client<R[K]>

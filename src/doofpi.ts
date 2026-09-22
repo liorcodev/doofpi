@@ -13,7 +13,9 @@ import type {
   OnRequestHandler,
   OnResponseHandler,
   Options,
-  Routes
+  Routes,
+  StreamHandler,
+  StreamOutput
 } from './types';
 import Extreme from 'extreme-router';
 import {
@@ -78,6 +80,18 @@ class EndpointBuilder<
   ): Endpoint<EndpointDefinition<Model> & { write: EndpointHandler<Model> }> {
     this.endpointDefinition.write = fn;
     return this.build() as Endpoint<EndpointDefinition<Model> & { write: EndpointHandler<Model> }>;
+  }
+  download(
+    fn: StreamHandler<Model, Meta, Env, Ctx, Extra>
+  ): Endpoint<EndpointDefinition<Model> & { download: StreamHandler<Model> }> {
+    this.endpointDefinition.download = fn;
+    return this.build() as Endpoint<EndpointDefinition<Model> & { download: StreamHandler<Model> }>;
+  }
+  upload(
+    fn: StreamHandler<Model, Meta, Env, Ctx, Extra>
+  ): Endpoint<EndpointDefinition<Model> & { upload: StreamHandler<Model> }> {
+    this.endpointDefinition.upload = fn;
+    return this.build() as Endpoint<EndpointDefinition<Model> & { upload: StreamHandler<Model> }>;
   }
 }
 
@@ -144,12 +158,19 @@ export default class Doofpi<
     const traverse = (_routes: Routes, _path: string = this.options.root) => {
       for (const [key, routeOrEndpoint] of Object.entries(_routes)) {
         const path = _path + '.' + key;
-        if ('read' in routeOrEndpoint || 'write' in routeOrEndpoint) {
+        if (
+          'read' in routeOrEndpoint ||
+          'write' in routeOrEndpoint ||
+          'download' in routeOrEndpoint ||
+          'upload' in routeOrEndpoint
+        ) {
           const endpointDefinition = routeOrEndpoint as EndpointDefinition;
           const routerStore = this.router.register(path);
           routerStore.model = endpointDefinition.model;
           routerStore.read = endpointDefinition.read;
           routerStore.write = endpointDefinition.write;
+          routerStore.download = endpointDefinition.download;
+          routerStore.upload = endpointDefinition.upload;
           routerStore.middleware = endpointDefinition.middleware;
           routerStore.meta = endpointDefinition.meta;
           continue;
@@ -186,6 +207,28 @@ export default class Doofpi<
       }
     }
     const response = new Response(finalBody, { status, headers });
+    if (this.onResponseHandlerFn) {
+      await this.onResponseHandlerFn({ res: response, req, env, ctx, extra });
+    }
+    return response;
+  }
+  private async createRawResponse(
+    body: StreamOutput,
+    headers: Headers,
+    req: Request,
+    env: Env,
+    ctx: Ctx,
+    extra: Extra
+  ): Promise<Response> {
+    let response: Response;
+    if (body instanceof Response) {
+      for (const [key, value] of headers) {
+        if (!body.headers.has(key)) body.headers.set(key, value);
+      }
+      response = body;
+    } else {
+      response = new Response(body, { headers });
+    }
     if (this.onResponseHandlerFn) {
       await this.onResponseHandlerFn({ res: response, req, env, ctx, extra });
     }
@@ -253,6 +296,40 @@ export default class Doofpi<
           throwError
         });
       }
+      // Get && Download
+      else if (method === 'get' && match.download) {
+        const inputParam = url.searchParams.get('input');
+        let input: unknown;
+        if (inputParam) {
+          const parseResult = this.safeParseJSON(inputParam);
+          if (!parseResult.success)
+            throw new DoofpiError({
+              message: 'Invalid JSON in input query parameter',
+              error: parseResult.error,
+              status: 400
+            });
+          input = parseResult.data;
+        } else input = Object.create(null);
+        if (match.model?.input) {
+          const parseResult = match.model.input.safeParse(input);
+          if (!parseResult.success) throw new ValidationError({ issues: parseResult.error.issues });
+          input = parseResult.data;
+        }
+        const downloadOutput = await match.download({
+          input: input as object,
+          req,
+          url,
+          path,
+          env,
+          ctx,
+          extra,
+          meta: match.meta,
+          headers,
+          throwError
+        });
+        // Download output bypasses JSON serialization and model.output validation
+        return this.createRawResponse(downloadOutput, headers, req, env, ctx, extra);
+      }
       // Post && Write
       else if (method === 'post' && match.write) {
         let input: unknown;
@@ -283,6 +360,41 @@ export default class Doofpi<
           headers,
           throwError
         });
+      }
+      // Post && Upload
+      else if (method === 'post' && match.upload) {
+        const inputParam = url.searchParams.get('input');
+        let input: unknown;
+        if (inputParam) {
+          const parseResult = this.safeParseJSON(inputParam);
+          if (!parseResult.success)
+            throw new DoofpiError({
+              message: 'Invalid JSON in input query parameter',
+              error: parseResult.error,
+              status: 400
+            });
+          input = parseResult.data;
+        } else input = Object.create(null);
+        if (match.model?.input) {
+          const parseResult = match.model.input.safeParse(input);
+          if (!parseResult.success) throw new ValidationError({ issues: parseResult.error.issues });
+          input = parseResult.data;
+        }
+        // Request body is left untouched here - the handler reads the raw upload itself via `req`
+        const uploadOutput = await match.upload({
+          input: input as object,
+          req,
+          url,
+          path,
+          env,
+          ctx,
+          extra,
+          meta: match.meta,
+          headers,
+          throwError
+        });
+        // Upload output bypasses JSON serialization and model.output validation
+        return this.createRawResponse(uploadOutput, headers, req, env, ctx, extra);
       }
       // Method Not Allowed
       else {

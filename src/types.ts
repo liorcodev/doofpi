@@ -1,4 +1,5 @@
 import type z from 'zod';
+import type { BodyInit } from 'bun';
 import type { ErrorShape } from './errors';
 
 export type InferZodType<T, Default = never> = [T] extends [z.ZodTypeAny] ? z.infer<T> : Default;
@@ -146,6 +147,20 @@ export type MiddlewareHandler<
   Extra extends ExtraDefinition = ExtraDefinition
 > = (options: MiddlewareHandlerOptions<Meta, Env, Ctx, Extra>) => Promise<void | never> | void | never;
 
+/**
+ * A raw body a `download` or `upload` handler may return. Unlike `read`/`write`, this is sent
+ * to the client as-is (no JSON serialization, no `model.output` validation).
+ */
+export type StreamOutput = Response | BodyInit;
+
+export type StreamHandler<
+  Model extends ModelDefinition = ModelDefinition,
+  Meta extends MetaDefinition = MetaDefinition,
+  Env extends EnvDefinition = EnvDefinition,
+  Ctx extends CtxDefinition = CtxDefinition,
+  Extra extends ExtraDefinition = ExtraDefinition
+> = (options: EndpointHandlerOptions<Model['input'], Meta, Env, Ctx, Extra>) => Promise<StreamOutput> | StreamOutput;
+
 export type EndpointDefinition<
   Model extends ModelDefinition = ModelDefinition,
   Meta extends MetaDefinition = MetaDefinition,
@@ -156,6 +171,8 @@ export type EndpointDefinition<
   model?: Model;
   read?: EndpointHandler<Model, Meta, Env, Ctx, Extra>;
   write?: EndpointHandler<Model, Meta, Env, Ctx, Extra>;
+  download?: StreamHandler<Model, Meta, Env, Ctx, Extra>;
+  upload?: StreamHandler<Model, Meta, Env, Ctx, Extra>;
   middleware?: MiddlewareHandler<Meta, Env, Ctx, Extra>[];
   meta?: Meta;
 };

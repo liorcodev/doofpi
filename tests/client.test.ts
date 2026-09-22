@@ -313,4 +313,74 @@ describe('Client Test', () => {
       status: 200
     });
   });
+
+  it('should return the raw Response for stream requests without parsing the body', async () => {
+    const client = createClient<any>({
+      url: 'https://api.example.com',
+      root: '/root'
+    }) as any;
+
+    let capturedUrl = '';
+    let capturedInit: RequestInit | undefined;
+
+    mockFetch(async (input: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(input);
+      capturedInit = init;
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' }
+      });
+    });
+
+    const result = await client.files.avatar.download({ id: '123' });
+
+    expect(result).toBeInstanceOf(Response);
+    expect(capturedUrl).toContain('https://api.example.com/root.files.avatar');
+    expect(capturedUrl).toContain('input=%7B%22id%22%3A%22123%22%7D');
+    expect(capturedInit?.method).toBe('GET');
+    const buffer = await result.arrayBuffer();
+    expect(new Uint8Array(buffer)).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('should throw DoofpiClientError for a failed stream request', async () => {
+    const client = createClient<any>({
+      url: 'https://api.example.com',
+      root: '/root'
+    }) as any;
+
+    mockFetch(async () => {
+      return new Response('ignored', { status: 404 });
+    });
+
+    await expect(client.files.avatar.download()).rejects.toMatchObject({
+      name: 'DoofpiClientError',
+      message: 'Request failed with status 404',
+      status: 404
+    });
+  });
+
+  it('should send a raw body and return the raw Response for upload requests', async () => {
+    const client = createClient<any>({
+      url: 'https://api.example.com',
+      root: '/root'
+    }) as any;
+
+    let capturedUrl = '';
+    let capturedInit: RequestInit | undefined;
+
+    mockFetch(async (input: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(input);
+      capturedInit = init;
+      return new Response('ok', { status: 200 });
+    });
+
+    const uploadBody = new Uint8Array([1, 2, 3]);
+    const result = await client.files.photo.upload({ filename: 'a.bin' }, uploadBody);
+
+    expect(result).toBeInstanceOf(Response);
+    expect(capturedUrl).toContain('https://api.example.com/root.files.photo');
+    expect(capturedUrl).toContain('input=%7B%22filename%22%3A%22a.bin%22%7D');
+    expect(capturedInit?.method).toBe('POST');
+    expect(capturedInit?.body).toBe(uploadBody);
+  });
 });

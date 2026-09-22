@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import Doofpi from '../index';
 
 describe('Base Test', () => {
@@ -369,5 +370,169 @@ describe('Base Test', () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toBe('admin');
+  });
+  it('should stream raw bytes without JSON serialization', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.download(() => new Uint8Array([1, 2, 3]))
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file'));
+    expect(res.status).toBe(200);
+    const buffer = await res.arrayBuffer();
+    expect(new Uint8Array(buffer)).toEqual(new Uint8Array([1, 2, 3]));
+  });
+  it('should stream a Response returned directly, merging accumulated headers', async () => {
+    d.onRequest(({ headers }) => {
+      headers.set('X-From-Request', 'yes');
+    });
+    const routes = d.routes({
+      file: d.endpointBuilder.download(
+        () => new Response('file-content', { headers: { 'Content-Type': 'application/octet-stream' } })
+      )
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/octet-stream');
+    expect(res.headers.get('X-From-Request')).toBe('yes');
+    const text = await res.text();
+    expect(text).toBe('file-content');
+  });
+  it('should validate input for stream endpoints', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.download(({ input }) => `bytes-for-${(input as { id: string }).id}`)
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file?input={"id":"abc"}'));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toBe('bytes-for-abc');
+  });
+  it('should return 405 when calling stream endpoint with POST', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.download(() => 'data')
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file', { method: 'POST' }));
+    expect(res.status).toBe(405);
+  });
+  it('should handle invalid JSON in query parameter for stream endpoints', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.download(({ input }) => JSON.stringify(input))
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file?input={invalid-json}'));
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { message: string };
+    expect(json.message).toBe('Invalid JSON in input query parameter');
+  });
+  it('should validate input against model.input for stream endpoints', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder
+        .model({ input: z.object({ id: z.string() }) })
+        .download(({ input }) => `bytes-for-${input.id}`)
+    });
+    d.register(routes);
+
+    const validRes = await d.fetch(new Request('http://localhost/root.file?input={"id":"abc"}'));
+    expect(validRes.status).toBe(200);
+    expect(await validRes.text()).toBe('bytes-for-abc');
+
+    const invalidRes = await d.fetch(new Request('http://localhost/root.file?input={}'));
+    expect(invalidRes.status).toBe(400);
+    const json = (await invalidRes.json()) as { message: string };
+    expect(json.message).toBe('Validation Error');
+  });
+  it('should run the onResponse hook for stream responses', async () => {
+    d.onResponse(({ res }) => {
+      res.headers.set('X-Stream-Response', 'yes');
+    });
+    const routes = d.routes({
+      file: d.endpointBuilder.download(() => 'data')
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Stream-Response')).toBe('yes');
+  });
+  it('should not overwrite headers already set on a streamed Response', async () => {
+    d.onRequest(({ headers }) => {
+      headers.set('X-Custom', 'from-request');
+    });
+    const routes = d.routes({
+      file: d.endpointBuilder.download(() => new Response('data', { headers: { 'X-Custom': 'from-response' } }))
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Custom')).toBe('from-response');
+  });
+  it('should upload raw bytes and receive a raw response back', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.upload(async ({ req }) => {
+        const bytes = new Uint8Array(await req.arrayBuffer());
+        return new Uint8Array([...bytes].reverse());
+      })
+    });
+    d.register(routes);
+
+    const res = await d.fetch(
+      new Request('http://localhost/root.file', { method: 'POST', body: new Uint8Array([1, 2, 3]) })
+    );
+    expect(res.status).toBe(200);
+    const buffer = await res.arrayBuffer();
+    expect(new Uint8Array(buffer)).toEqual(new Uint8Array([3, 2, 1]));
+  });
+  it('should validate input from the query string for upload endpoints, leaving the body untouched', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.model({ input: z.object({ filename: z.string() }) }).upload(async ({ input, req }) => {
+        const bytes = await req.arrayBuffer();
+        return `${input.filename}:${bytes.byteLength}`;
+      })
+    });
+    d.register(routes);
+
+    const res = await d.fetch(
+      new Request('http://localhost/root.file?input={"filename":"a.bin"}', {
+        method: 'POST',
+        body: new Uint8Array([1, 2, 3, 4])
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('a.bin:4');
+
+    const invalidRes = await d.fetch(
+      new Request('http://localhost/root.file', { method: 'POST', body: new Uint8Array([1]) })
+    );
+    expect(invalidRes.status).toBe(400);
+  });
+  it('should return 405 when calling upload endpoint with GET', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.upload(() => 'data')
+    });
+    d.register(routes);
+
+    const res = await d.fetch(new Request('http://localhost/root.file'));
+    expect(res.status).toBe(405);
+  });
+  it('should handle invalid JSON in query parameter for upload endpoints', async () => {
+    const routes = d.routes({
+      file: d.endpointBuilder.upload(({ input }) => JSON.stringify(input))
+    });
+    d.register(routes);
+
+    const res = await d.fetch(
+      new Request('http://localhost/root.file?input={invalid-json}', { method: 'POST', body: new Uint8Array([1]) })
+    );
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { message: string };
+    expect(json.message).toBe('Invalid JSON in input query parameter');
   });
 });

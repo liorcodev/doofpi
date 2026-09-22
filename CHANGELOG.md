@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 (2026-09-22)
+
+### Features
+
+- **Download Endpoints** - New `.download(handler)` method on the endpoint builder (`GET`) for returning raw
+  `Response`/`BodyInit` (files, bytes, etc.) that bypasses JSON serialization and `model.output` validation entirely.
+  Works with or without a `model.input` schema. Client's `.download()` method always resolves to the raw `Response`
+  object, never JSON-parsed
+- **Upload Endpoints** - New `.upload(handler)` method on the endpoint builder (`POST`), the write-side twin of
+  `download`. The request body is left completely untouched so the handler can read it raw (e.g. via
+  `req.arrayBuffer()`), while `input` (if a `model.input` schema is set) is still parsed from the query string like a
+  `read`/`download` endpoint. Client's `.upload(input, body, init?)` sends `body` as the raw request payload and
+  resolves to the raw, never-JSON-parsed `Response`
+
 ## 1.0.0 (2026-03-27)
 
 ### Features
