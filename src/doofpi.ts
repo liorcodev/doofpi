@@ -1,6 +1,7 @@
 import type {
   CreateContextHandler,
   CtxDefinition,
+  EmailHandler,
   Endpoint,
   EndpointDefinition,
   EndpointHandler,
@@ -27,6 +28,7 @@ import {
   type ErrorShape
 } from './errors';
 import type { BodyInit } from 'bun';
+import type { ForwardableEmailMessage } from '@cloudflare/workers-types';
 
 class EndpointBuilder<
   Model extends ModelDefinition = ModelDefinition,
@@ -106,6 +108,7 @@ export default class Doofpi<
   private onErrorHandlerFn?: OnErrorHandler<Env, Ctx, Extra>;
   private onRequestHandlerFn?: OnRequestHandler<Env, Ctx, Extra>;
   private onResponseHandlerFn?: OnResponseHandler<Env, Ctx, Extra>;
+  private onEmailHandlerFn?: EmailHandler<Env, Extra>;
   private options: Options = { root: '/doofpi' };
   constructor(options?: Partial<Options>) {
     if (options) this.options = { ...this.options, ...options };
@@ -146,6 +149,13 @@ export default class Doofpi<
       throw new Error('onResponse handler is already defined');
     }
     this.onResponseHandlerFn = fn;
+    return this;
+  }
+  onEmail(fn: EmailHandler<Env, Extra>): this {
+    if (this.onEmailHandlerFn) {
+      throw new Error('onEmail handler is already defined');
+    }
+    this.onEmailHandlerFn = fn;
     return this;
   }
   get endpointBuilder() {
@@ -233,6 +243,14 @@ export default class Doofpi<
       await this.onResponseHandlerFn({ res: response, req, env, ctx, extra });
     }
     return response;
+  }
+  async email(
+    message: ForwardableEmailMessage,
+    env: Env = Object.create(null),
+    extra: Extra = Object.create(null)
+  ): Promise<void> {
+    if (!this.onEmailHandlerFn) return;
+    await this.onEmailHandlerFn({ message, env, extra });
   }
   async fetch(req: Request, env: Env = Object.create(null), extra: Extra = Object.create(null)): Promise<Response> {
     const url = new URL(req.url);

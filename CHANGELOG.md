@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 (2026-10-06)
+
+### Features
+
+- **Cloudflare Email Routing** - New `onEmail(handler)` hook and `email(message, env, extra)` method on `Doofpi` for
+  handling incoming Cloudflare Email Routing messages. Export it as the Worker's `email` handler, separate from `fetch`.
+  The handler receives `{ message, env, extra }`; `@cloudflare/workers-types` is an optional peer dependency used for
+  the `ForwardableEmailMessage` type
+
 ## 1.1.0 (2026-09-22)
 
 ### Features

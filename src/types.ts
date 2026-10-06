@@ -1,12 +1,13 @@
 import type z from 'zod';
 import type { BodyInit } from 'bun';
 import type { ErrorShape } from './errors';
+import type { ForwardableEmailMessage } from '@cloudflare/workers-types';
 
-export type InferZodType<T, Default = never> = [T] extends [z.ZodTypeAny] ? z.infer<T> : Default;
+export type InferZodType<T, Default = never> = [T] extends [z.ZodType] ? z.infer<T> : Default;
 
 export type ModelDefinition = {
-  input?: z.ZodTypeAny;
-  output?: z.ZodTypeAny;
+  input?: z.ZodType;
+  output?: z.ZodType;
 };
 
 export type MetaDefinition = object;
@@ -87,6 +88,19 @@ export type CreateContextOptions<
   env: Env;
   extra: Extra;
 };
+
+export type EmailHandlerOptions<
+  Env extends EnvDefinition = EnvDefinition,
+  Extra extends ExtraDefinition = ExtraDefinition
+> = {
+  message: ForwardableEmailMessage;
+  env: Env;
+  extra: Extra;
+};
+
+export type EmailHandler<Env extends EnvDefinition = EnvDefinition, Extra extends ExtraDefinition = ExtraDefinition> = (
+  options: EmailHandlerOptions<Env, Extra>
+) => Promise<void> | void;
 
 export type CreateContextHandler<
   Env extends EnvDefinition = EnvDefinition,

@@ -48,7 +48,27 @@ pnpm install doofpi
 | **Runtime Agnostic**       | Bun · Cloudflare Workers · Vercel · Netlify · Deno and more |
 | **Zod Validation**         | Optional input _and_ output validation at runtime           |
 | **Web Standards**          | Built on the native `Request` / `Response` API              |
+| **Cloudflare Email**       | Handle Email Routing messages with `onEmail`                |
 | **Thoroughly Tested**      | 100% code coverage across all core features                 |
+
+## Cloudflare Email Routing
+
+```ts
+const d = new Doofpi().onEmail(async ({ message, env, extra }) => {
+  await message.forward('inbox@example.com');
+});
+
+export default {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext) {
+    return d.fetch(req, env, ctx);
+  },
+  async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
+    return d.email(message, env, ctx);
+  }
+};
+```
+
+Types come from `@cloudflare/workers-types` (optional peer dependency).
 
 ## Documentation
 
