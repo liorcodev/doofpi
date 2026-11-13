@@ -43,6 +43,8 @@ export type Client<R extends Routes> = {
       : never;
 };
 
+export type ClientFetch = (input: string, init?: RequestInit) => Promise<Response>;
+
 export type ClientRequestInit = Pick<RequestInit, 'cache' | 'signal' | 'credentials'> & {
   headers?: Record<string, string>;
 };

@@ -1,7 +1,7 @@
 import type { ErrorShape } from '../errors';
 import type { Routes } from '../types';
 import { DoofpiClientError } from './error';
-import type { Client, ClientRequestInit } from './types';
+import type { Client, ClientFetch, ClientRequestInit } from './types';
 import type { BodyInit } from 'bun';
 
 const clientFetch = async (options: {
@@ -11,8 +11,10 @@ const clientFetch = async (options: {
   init?: ClientRequestInit;
   input?: unknown;
   body?: BodyInit;
+  fetch?: ClientFetch;
 }) => {
   const { url, path, method, input, init, body } = options;
+  const doFetch = options.fetch ?? fetch;
   const headers = new Headers(init?.headers);
 
   if (input && method === 'write') {
@@ -21,7 +23,7 @@ const clientFetch = async (options: {
   const finalPath = input && method !== 'write' ? `${path}?input=${encodeURIComponent(JSON.stringify(input))}` : path;
   const isPost = method === 'write' || method === 'upload';
   const finalBody = method === 'write' ? JSON.stringify(input) : method === 'upload' ? body : undefined;
-  const response = await fetch(url + finalPath, {
+  const response = await doFetch(url + finalPath, {
     method: isPost ? 'POST' : 'GET',
     headers,
     body: finalBody,
@@ -69,6 +71,7 @@ export const createClient = <R extends Routes>(options: {
   url: string;
   root?: string;
   init?: ClientRequestInit;
+  fetch?: ClientFetch;
 }): Client<R> => {
   const { url, root = '/doofpi' } = options;
   const proxy = (path: string = root): Client<R> => {
@@ -81,7 +84,8 @@ export const createClient = <R extends Routes>(options: {
               path,
               method: prop as 'read' | 'write' | 'download',
               init: { ...options.init, ...init },
-              input
+              input,
+              fetch: options.fetch
             });
         }
         if (prop === 'upload') {
@@ -92,7 +96,8 @@ export const createClient = <R extends Routes>(options: {
               method: 'upload',
               init: { ...options.init, ...init },
               input,
-              body
+              body,
+              fetch: options.fetch
             });
         }
         const newPath = path + '.' + prop;

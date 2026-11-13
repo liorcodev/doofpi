@@ -70,6 +70,25 @@ export default {
 
 Types come from `@cloudflare/workers-types` (optional peer dependency).
 
+## Custom Client Fetch
+
+`createClient` uses the global `fetch` by default. Pass your own `fetch` to change the transport, for example to call a
+`Doofpi` instance in-process during SSR without an HTTP round trip:
+
+```ts
+import { createClient, type ClientFetch } from 'doofpi';
+
+const localFetch: ClientFetch = (input, init) => d.fetch(new Request(input, init));
+
+const client = createClient<AppRoute>({
+  url: 'http://localhost', // only used to build an absolute URL
+  root: '/doofpi',
+  fetch: localFetch
+});
+```
+
+It also works for Cloudflare service bindings and for mocking requests in tests.
+
 ## Documentation
 
 Full documentation, guides, and API reference are available at

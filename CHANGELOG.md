@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 (2026-11-13)
+
+### Features
+
+- **Custom Client Fetch** - `createClient` accepts an optional `fetch` function (`ClientFetch`, exported as a type) used
+  for every request instead of the global `fetch`. Lets you call a `Doofpi` instance in-process
+  (`fetch: (input, init) => d.fetch(new Request(input, init))`), use service bindings, or mock requests in tests.
+  Defaults to the global `fetch`, so existing clients are unaffected
+
 ## 1.2.0 (2026-10-06)
 
 ### Features
