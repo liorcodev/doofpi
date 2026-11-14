@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 (2026-11-14)
+
+### Fixes
+
+- **`zod` peer dependency** - `zod` (`^4.0.0`) is now declared as a peer dependency. The published type declarations
+  import it, so without it installed the typed client degraded to `any` (e.g. `client.hello.read()` was reported as
+  missing its `input` argument)
+
 ## 1.3.0 (2026-11-13)
 
 ### Features
